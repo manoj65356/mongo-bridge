@@ -1,0 +1,136 @@
+{
+ "actions": [],
+ "creation": "2026-03-13 17:18:20.670783",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "enable_mongodb",
+  "host",
+  "port",
+  "database",
+  "authentication_db",
+  "replica_set",
+  "options",
+  "column_break_qhob",
+  "is_remote",
+  "ssl_enabled",
+  "use_srv",
+  "username",
+  "password",
+  "connection_uri",
+  "connection_timeout"
+ ],
+ "fields": [
+  {
+   "default": "0",
+   "fieldname": "enable_mongodb",
+   "fieldtype": "Check",
+   "label": "Enable MongoDB"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_remote",
+   "fieldtype": "Check",
+   "label": "Is Remote"
+  },
+  {
+   "fieldname": "username",
+   "fieldtype": "Data",
+   "label": "Username"
+  },
+  {
+   "fieldname": "password",
+   "fieldtype": "Password",
+   "label": "Password"
+  },
+  {
+   "default": "admin",
+   "fieldname": "authentication_db",
+   "fieldtype": "Data",
+   "label": "Authentication DB"
+  },
+  {
+   "description": "Name of the replica set (e.g. rs0 for local, atlas-shard-0 for Atlas). Required when connecting to a replica set or sharded Atlas cluster for read preference and failover to work correctly.",
+   "fieldname": "replica_set",
+   "fieldtype": "Data",
+   "label": "Replica Set"
+  },
+  {
+   "description": "Full URI overrides all other fields. Stored encrypted.",
+   "fieldname": "connection_uri",
+   "fieldtype": "Password",
+   "label": "Connection URI"
+  },
+  {
+   "default": "0",
+   "fieldname": "ssl_enabled",
+   "fieldtype": "Check",
+   "label": "SSL Enabled"
+  },
+  {
+   "default": "5000",
+   "description": "Default 5000 ms",
+   "fieldname": "connection_timeout",
+   "fieldtype": "Int",
+   "label": "Connection Timeout"
+  },
+  {
+   "fieldname": "column_break_qhob",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "use_srv",
+   "fieldtype": "Check",
+   "label": "Use SRV (Atlas)"
+  },
+  {
+   "description": "Mongo server hostname",
+   "fieldname": "host",
+   "fieldtype": "Data",
+   "label": "Mongo Host"
+  },
+  {
+   "default": "27017",
+   "description": "Default 27017",
+   "fieldname": "port",
+   "fieldtype": "Int",
+   "label": "Mongo Port"
+  },
+  {
+   "fieldname": "database",
+   "fieldtype": "Data",
+   "label": "Database Name"
+  },
+  {
+   "fieldname": "options",
+   "fieldtype": "Data",
+   "label": "Options"
+  }
+ ],
+ "grid_page_length": 50,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-03-16 11:46:40.977274",
+ "modified_by": "Administrator",
+ "module": "Mongo Bridge",
+ "name": "MongoDB Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

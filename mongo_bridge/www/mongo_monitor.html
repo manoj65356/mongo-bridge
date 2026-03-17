@@ -1,0 +1,692 @@
+{% extends "templates/web.html" %}
+
+{% block page_content %}
+<style>
+  .mm-wrap {
+    font-family: var(--font-stack);
+    padding: 24px 0 60px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .mm-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .mm-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-color);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .mm-title svg { color: var(--primary); }
+  .mm-updated { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+  .mm-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .mm-btn {
+    padding: 6px 14px;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+    background: var(--card-bg);
+    color: var(--text-color);
+    font-size: 12px;
+    font-family: var(--font-stack);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s;
+    text-decoration: none;
+  }
+  .mm-btn:hover { background: var(--fg-hover-color); }
+  .mm-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  /* Status pill */
+  .mm-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 100px;
+    font-size: 12px;
+    font-weight: 500;
+    background: rgba(41,174,97,0.1);
+    color: var(--green, #29ae61);
+    border: 1px solid rgba(41,174,97,0.25);
+  }
+  .mm-status.offline {
+    background: rgba(224,54,54,0.08);
+    color: var(--red, #e03636);
+    border-color: rgba(224,54,54,0.3);
+  }
+  .mm-status .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: blink 2s ease-in-out infinite;
+  }
+  .mm-status.offline .dot { animation: none; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* Stat cards */
+  .mm-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .mm-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg, 8px);
+    padding: 16px 18px;
+    border-top: 3px solid var(--card-accent, var(--primary));
+  }
+  .mm-card-label {
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px;
+  }
+  .mm-card-value {
+    font-size: 24px; font-weight: 700; color: var(--text-color);
+    line-height: 1; font-variant-numeric: tabular-nums;
+  }
+  .mm-card-sub { font-size: 11px; color: var(--text-muted); margin-top: 5px; }
+
+  /* Two-col grid */
+  .mm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  @media(max-width: 768px) { .mm-grid { grid-template-columns: 1fr; } }
+
+  /* Panel */
+  .mm-panel {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg, 8px);
+    padding: 18px 20px;
+  }
+  .mm-panel-title {
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.07em;
+    margin-bottom: 14px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  /* KV rows */
+  .mm-kv {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 7px 0; border-bottom: 1px solid var(--border-color); font-size: 12px;
+  }
+  .mm-kv:last-child { border-bottom: none; }
+  .mm-kv-key { color: var(--text-muted); }
+  .mm-kv-val {
+    color: var(--text-color);
+    font-family: var(--font-monospace, monospace);
+    font-weight: 500; word-break: break-all;
+    text-align: right; max-width: 60%;
+  }
+
+  /* Bar metric */
+  .mm-bar-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 0; border-bottom: 1px solid var(--border-color);
+    font-size: 12px; gap: 8px;
+  }
+  .mm-bar-row:last-child { border-bottom: none; }
+  .mm-bar-key   { color: var(--text-muted); min-width: 55px; }
+  .mm-bar-right { display: flex; align-items: center; gap: 8px; }
+  .mm-bar-num   { color: var(--text-color); font-family: var(--font-monospace, monospace); min-width: 60px; text-align: right; }
+  .mm-bar-track { width: 90px; height: 5px; background: var(--border-color); border-radius: 3px; overflow: hidden; }
+  .mm-bar-fill  { height: 100%; background: var(--primary); border-radius: 3px; transition: width 0.5s; }
+
+  /* Collections table */
+  .mm-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .mm-table th {
+    text-align: left; color: var(--text-muted); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 0 0 10px; border-bottom: 1px solid var(--border-color); font-weight: 600;
+  }
+  .mm-table th.r { text-align: right; }
+  .mm-table td { padding: 9px 0; border-bottom: 1px solid var(--border-color); color: var(--text-color); }
+  .mm-table td.name { color: var(--primary); font-weight: 500; }
+  .mm-table td.r { text-align: right; font-family: var(--font-monospace, monospace); }
+  .mm-table tr:last-child td { border-bottom: none; }
+
+  /* Connection gauge */
+  .mm-gauge { display: flex; align-items: flex-end; gap: 3px; height: 44px; margin: 8px 0; }
+  .mm-gauge-bar { flex: 1; border-radius: 2px 2px 0 0; }
+
+  /* Log rows */
+  .mm-log-row {
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 12px;
+  }
+  .mm-log-row:last-child { border-bottom: none; }
+  .mm-log-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 3px;
+    gap: 8px;
+  }
+  .mm-log-method {
+    color: var(--red, #e03636);
+    font-family: var(--font-monospace, monospace);
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 70%;
+  }
+  .mm-log-time { color: var(--text-muted); font-size: 11px; white-space: nowrap; }
+  .mm-log-msg {
+    color: var(--text-muted);
+    font-family: var(--font-monospace, monospace);
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Log pagination */
+  .mm-log-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 12px;
+    margin-top: 4px;
+    border-top: 1px solid var(--border-color);
+  }
+
+  /* Alert — neutral by default, .is-error makes it red */
+  .mm-alert {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg, 8px);
+    padding: 18px 22px;
+    color: var(--text-color);
+    font-size: 13px;
+    margin: 16px 0;
+    display: none;
+  }
+  .mm-alert.is-error {
+    background: rgba(224,54,54,0.06);
+    border-color: rgba(224,54,54,0.25);
+    color: var(--red, #e03636);
+  }
+  .mm-alert.is-error a { color: var(--red, #e03636); }
+
+  /* Loading spinner */
+  .mm-loading { text-align: center; padding: 60px 0; color: var(--text-muted); font-size: 13px; }
+  .mm-spin {
+    display: inline-block; width: 22px; height: 22px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 10px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #mm-main { display: none; }
+</style>
+
+<div class="mm-wrap">
+
+  <div class="mm-header">
+    <div>
+      <div class="mm-title">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+          <ellipse cx="12" cy="5" rx="9" ry="3"/>
+          <path d="M3 5v5c0 1.657 4.03 3 9 3s9-1.343 9-3V5"/>
+          <path d="M3 10v5c0 1.657 4.03 3 9 3s9-1.343 9-3v-5"/>
+          <path d="M3 15v4c0 1.657 4.03 3 9 3s9-1.343 9-3v-4"/>
+        </svg>
+        MongoDB Monitor
+      </div>
+      <div class="mm-updated" id="mm-updated">Connecting…</div>
+    </div>
+    <div class="mm-actions">
+      <span class="mm-status" id="mm-badge">
+        <span class="dot"></span>
+        <span id="mm-badge-text">Connecting</span>
+      </span>
+      <button class="mm-btn" onclick="loadStats()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="23 4 23 10 17 10"/>
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+        Refresh
+      </button>
+      <a class="mm-btn" href="/app/mongodb-settings/MongoDB Settings">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        Settings
+      </a>
+      <a class="mm-btn" href="/app/error-log?method=Mongo">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+        </svg>
+        Error Logs
+      </a>
+    </div>
+  </div>
+
+  <div class="mm-loading" id="mm-loading">
+    <div class="mm-spin"></div><br>Loading…
+  </div>
+
+  <div class="mm-alert" id="mm-error"></div>
+
+  <div id="mm-main">
+
+    <div class="mm-cards">
+      <div class="mm-card" style="--card-accent:var(--primary)">
+        <div class="mm-card-label">Uptime</div>
+        <div class="mm-card-value" id="c-uptime">—</div>
+        <div class="mm-card-sub" id="c-uptime-sub"></div>
+      </div>
+      <div class="mm-card" style="--card-accent:var(--blue,#5e8ee6)">
+        <div class="mm-card-label">Active connections</div>
+        <div class="mm-card-value" id="c-conns">—</div>
+        <div class="mm-card-sub" id="c-conns-sub"></div>
+      </div>
+      <div class="mm-card" style="--card-accent:var(--yellow,#f0a500)">
+        <div class="mm-card-label">Memory (resident)</div>
+        <div class="mm-card-value" id="c-mem">—</div>
+        <div class="mm-card-sub">MB</div>
+      </div>
+      <div class="mm-card" style="--card-accent:var(--purple,#7b4ec8)">
+        <div class="mm-card-label">Version</div>
+        <div class="mm-card-value" id="c-ver" style="font-size:18px">—</div>
+        <div class="mm-card-sub" id="c-ver-sub"></div>
+      </div>
+      <div class="mm-card" style="--card-accent:var(--teal,#0f9d92)">
+        <div class="mm-card-label">Collections</div>
+        <div class="mm-card-value" id="c-cols">—</div>
+        <div class="mm-card-sub">in current database</div>
+      </div>
+      <div class="mm-card" style="--card-accent:var(--green,#29ae61)">
+        <div class="mm-card-label">Total ops</div>
+        <div class="mm-card-value" id="c-ops">—</div>
+        <div class="mm-card-sub">since server start</div>
+      </div>
+    </div>
+
+    <div class="mm-grid">
+      <div class="mm-panel">
+        <div class="mm-panel-title">Server info</div>
+        <div id="p-server"></div>
+      </div>
+      <div class="mm-panel">
+        <div class="mm-panel-title">Operations breakdown</div>
+        <div id="p-ops"></div>
+      </div>
+    </div>
+
+    <div class="mm-grid">
+      <div class="mm-panel">
+        <div class="mm-panel-title">Collections</div>
+        <table class="mm-table">
+          <thead>
+            <tr><th>Name</th><th class="r">Documents</th><th class="r">Size</th></tr>
+          </thead>
+          <tbody id="p-cols">
+            <tr><td colspan="3" style="color:var(--text-muted);padding:12px 0">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="mm-panel">
+        <div class="mm-panel-title">Connection pool</div>
+        <div class="mm-gauge" id="p-gauge"></div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:16px" id="p-gauge-lbl"></div>
+        <div class="mm-panel-title">Network I/O</div>
+        <div id="p-network"></div>
+      </div>
+    </div>
+
+    <div class="mm-panel" style="margin-top:0">
+      <div class="mm-panel-title" style="display:flex;justify-content:space-between;
+        align-items:center;margin-bottom:0;padding-bottom:10px">
+        <span>Recent errors</span>
+        <a href="/app/error-log?method=Mongo"
+          style="font-size:11px;color:var(--primary);text-decoration:none;
+            font-weight:400;text-transform:none;letter-spacing:0">
+          View all →
+        </a>
+      </div>
+
+      <div id="p-logs" style="margin-top:14px">
+        <div style="color:var(--text-muted);font-size:12px;padding:8px 0">Loading…</div>
+      </div>
+
+      <div class="mm-log-nav" id="p-logs-nav" style="display:none">
+        <button class="mm-btn" id="logs-prev" onclick="changePage(-1)">← Prev</button>
+        <span id="logs-page-info" style="font-size:12px;color:var(--text-muted)"></span>
+        <button class="mm-btn" id="logs-next" onclick="changePage(1)">Next →</button>
+      </div>
+    </div>
+
+    <!-- MongoDB Bridge Log -->
+    <div class="mm-panel" style="margin-top:14px">
+      <div class="mm-panel-title" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0;padding-bottom:10px">
+        <span>mongodb_bridge.log</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="log-lines" onchange="loadRawLog()"
+            style="font-size:11px;padding:3px 6px;border:1px solid var(--border-color);
+              border-radius:var(--border-radius);background:var(--card-bg);color:var(--text-color)">
+            <option value="50">Last 50</option>
+            <option value="100">Last 100</option>
+            <option value="200">Last 200</option>
+          </select>
+          <button class="mm-btn" onclick="loadRawLog()">↻ Refresh</button>
+        </div>
+      </div>
+      <pre id="p-rawlog"
+        style="margin:14px 0 0;padding:12px;background:var(--fg-color,#f5f5f5);
+          border-radius:var(--border-radius);font-size:11px;
+          font-family:var(--font-monospace,monospace);overflow-x:auto;
+          max-height:400px;overflow-y:auto;white-space:pre-wrap;
+          color:var(--text-color)">Loading…</pre>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const fmtB = b => b>1e9?(b/1e9).toFixed(2)+'GB':b>1e6?(b/1e6).toFixed(1)+'MB':b>1e3?(b/1e3).toFixed(0)+'KB':b+'B';
+const fmtS = s => s>86400?Math.floor(s/86400)+'d '+Math.floor((s%86400)/3600)+'h':s>3600?Math.floor(s/3600)+'h '+Math.floor((s%3600)/60)+'m':Math.floor(s/60)+'m '+Math.floor(s%60)+'s';
+const kv   = (k,v) => `<div class="mm-kv"><span class="mm-kv-key">${k}</span><span class="mm-kv-val">${v}</span></div>`;
+const brow = (k,v,mx) => {
+  const p = mx > 0 ? Math.round(v/mx*100) : 0;
+  return `<div class="mm-bar-row">
+    <span class="mm-bar-key">${k}</span>
+    <div class="mm-bar-right">
+      <span class="mm-bar-num">${v.toLocaleString()}</span>
+      <div class="mm-bar-track"><div class="mm-bar-fill" style="width:${p}%"></div></div>
+    </div>
+  </div>`;
+};
+
+const ICON_LOCK = `<svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="var(--text-muted)" stroke-width="1.5">
+  <rect x="3" y="11" width="18" height="11" rx="2"/>
+  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+</svg>`;
+const ICON_DISABLED = `<svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="var(--text-muted)" stroke-width="1.5">
+  <circle cx="12" cy="12" r="10"/>
+  <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+</svg>`;
+const ICON_ERROR = `<svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="var(--text-muted)" stroke-width="1.5">
+  <circle cx="12" cy="12" r="10"/>
+  <line x1="12" y1="8" x2="12" y2="12"/>
+  <line x1="12" y1="16" x2="12.01" y2="16"/>
+</svg>`;
+
+function showMessage(icon, title, subtitle, btn_label, btn_href, is_error) {
+  const el = document.getElementById('mm-error');
+  document.getElementById('mm-loading').style.display = 'none';
+  document.getElementById('mm-main').style.display    = 'none';
+  el.className     = 'mm-alert' + (is_error ? ' is-error' : '');
+  el.style.display = 'block';
+  el.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;
+      justify-content:center;padding:32px 0;gap:14px;text-align:center">
+      ${icon}
+      <div style="font-size:16px;font-weight:600;color:var(--text-color)">${title}</div>
+      <div style="font-size:13px;color:var(--text-muted);max-width:360px">${subtitle}</div>
+      <a href="${btn_href}"
+        style="margin-top:4px;padding:7px 20px;background:var(--primary);color:#fff;
+          border-radius:var(--border-radius);text-decoration:none;font-size:13px;font-weight:500">
+        ${btn_label}
+      </a>
+    </div>`;
+}
+
+async function loadCollections() {
+  try {
+    const r    = await frappe.call({ method: 'mongo_bridge.api.get_collections_stats' });
+    const cols = r.message || [];
+    document.getElementById('c-cols').textContent = cols.length;
+    const mx = Math.max(...cols.map(c => c.count||0), 1);
+    document.getElementById('p-cols').innerHTML = cols.map(c => {
+      const p = Math.round(((c.count||0)/mx)*100);
+      return `<tr>
+        <td class="name">${c.name}</td>
+        <td class="r">
+          <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">
+            <span>${(c.count||0).toLocaleString()}</span>
+            <div class="mm-bar-track"><div class="mm-bar-fill" style="width:${p}%"></div></div>
+          </div>
+        </td>
+        <td class="r">${fmtB(c.size||0)}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="3" style="color:var(--text-muted);padding:12px 0">No collections</td></tr>';
+  } catch(e) {
+    document.getElementById('p-cols').innerHTML =
+      '<tr><td colspan="3" style="color:var(--text-muted);padding:12px 0">Could not load</td></tr>';
+  }
+}
+
+let logsPage          = 0;
+const LOG_PAGE_SIZE   = 5;
+
+async function loadLogs() {
+  document.getElementById('p-logs').innerHTML =
+    '<div style="color:var(--text-muted);font-size:12px;padding:8px 0">Loading…</div>';
+
+  try {
+    const r = await frappe.call({
+      method: 'frappe.client.get_list',
+      args: {
+        doctype:     'Error Log',
+        filters:     [['method', 'like', '%mongo%']],
+        fields:      ['name', 'method', 'creation', 'error'],
+        limit:       LOG_PAGE_SIZE + 1,
+        limit_start: logsPage * LOG_PAGE_SIZE,
+        order_by:    'creation desc',
+      }
+    });
+
+    const all     = r.message || [];
+    const hasNext = all.length > LOG_PAGE_SIZE;
+    const logs    = all.slice(0, LOG_PAGE_SIZE);
+
+    if (!logs.length) {
+      document.getElementById('p-logs').innerHTML = logsPage === 0
+        ? '<div style="color:var(--text-muted);font-size:12px;padding:8px 0">No errors logged — all good.</div>'
+        : '<div style="color:var(--text-muted);font-size:12px;padding:8px 0">No more entries.</div>';
+      document.getElementById('p-logs-nav').style.display = logsPage === 0 ? 'none' : 'flex';
+      
+      document.getElementById('logs-next').disabled = true;
+      document.getElementById('logs-prev').disabled = logsPage === 0;
+      document.getElementById('logs-page-info').textContent = `Page ${logsPage + 1}`;
+      return;
+    }
+
+    document.getElementById('p-logs').innerHTML = logs.map(log => {
+      const errorText = (log.error || log.method || '—').split('\n').filter(Boolean)[0];
+      const time      = (frappe.datetime && frappe.datetime.prettyDate)
+                          ? frappe.datetime.prettyDate(log.creation)
+                          : log.creation;
+      return `<div class="mm-log-row">
+        <div class="mm-log-meta">
+          <span class="mm-log-method">${errorText}</span>
+          <span class="mm-log-time">${time}</span>
+        </div>
+        <div class="mm-log-msg">${log.method || '—'}</div>
+      </div>`;
+    }).join('');
+
+    const nav  = document.getElementById('p-logs-nav');
+    const prev = document.getElementById('logs-prev');
+    const next = document.getElementById('logs-next');
+    const info = document.getElementById('logs-page-info');
+
+    nav.style.display  = 'flex';
+    prev.disabled      = logsPage === 0;
+    next.disabled      = !hasNext;
+    info.textContent   = `Page ${logsPage + 1}`;
+
+  } catch(e) {
+    document.getElementById('p-logs').innerHTML =
+      '<div style="color:var(--text-muted);font-size:12px;padding:8px 0">Could not load error logs.</div>';
+    document.getElementById('p-logs-nav').style.display = 'none';
+  }
+}
+
+async function loadRawLog() {
+  const lines = document.getElementById('log-lines').value;
+  const pre   = document.getElementById('p-rawlog');
+  pre.textContent = 'Loading…';
+  try {
+    const r = await frappe.call({
+      method: 'mongo_bridge.api.get_mongo_logs',
+      args: { lines }
+    });
+    const d = r.message;
+    if (!d.exists) {
+      pre.textContent = 'Log file not found: logs/mongodb_bridge.log';
+      return;
+    }
+    // Colour-code lines by level
+    pre.innerHTML = d.lines.map(line => {
+      const l = line.trim();
+      let color = 'var(--text-muted)';
+      if (l.includes('ERROR') || l.includes('SLOW QUERY')) color = 'var(--red,#e03636)';
+      else if (l.includes('WARNING'))                        color = 'var(--yellow,#f0a500)';
+      else if (l.includes('INFO'))                           color = 'var(--text-color)';
+      return `<span style="color:${color}">${l.replace(/</g,'&lt;')}</span>`;
+    }).join('\n');
+    // Auto-scroll to bottom
+    pre.scrollTop = pre.scrollHeight;
+  } catch(e) {
+    pre.textContent = 'Could not load log: ' + e.message;
+  }
+}
+
+function changePage(dir) {
+  logsPage = Math.max(0, logsPage + dir);
+  loadLogs();
+}
+
+async function loadStats() {
+  document.getElementById('mm-loading').style.display = 'block';
+  document.getElementById('mm-main').style.display    = 'none';
+  document.getElementById('mm-error').style.display   = 'none';
+
+  try {
+    const r = await frappe.call({ method: 'mongo_bridge.api.get_mongo_status' });
+    const d = r.message;
+    document.getElementById('mm-loading').style.display = 'none';
+
+    if (d.disabled) {
+      document.getElementById('mm-badge').className        = 'mm-status offline';
+      document.getElementById('mm-badge-text').textContent = 'Disabled';
+      document.getElementById('mm-updated').textContent    = '';
+      showMessage(ICON_DISABLED, 'MongoDB is Disabled',
+        'Enable MongoDB in settings to use this monitor.',
+        'Open Settings', '/app/mongodb-settings/MongoDB Settings', false);
+      return;
+    }
+
+    if (!d.ok) throw new Error(d.error || 'Unknown error');
+
+    document.getElementById('mm-main').style.display    = 'block';
+    document.getElementById('mm-badge').className        = 'mm-status';
+    document.getElementById('mm-badge-text').textContent = 'Connected';
+    document.getElementById('mm-updated').textContent    = 'Last updated: ' + new Date().toLocaleTimeString();
+
+    document.getElementById('c-uptime').textContent  = fmtS(d.uptime||0);
+    document.getElementById('c-ver').textContent     = d.version || '—';
+    document.getElementById('c-ver-sub').textContent = d.storage_engine || '';
+    document.getElementById('c-mem').textContent     = d.mem_resident || '—';
+
+    const cur = d.connections_current||0, avl = d.connections_available||0, tot = d.connections_total||0;
+    document.getElementById('c-conns').textContent     = cur;
+    document.getElementById('c-conns-sub').textContent = avl + ' available';
+
+    const ops = (d.ops_insert||0)+(d.ops_query||0)+(d.ops_update||0)+(d.ops_delete||0)+(d.ops_getmore||0);
+    document.getElementById('c-ops').textContent = ops.toLocaleString();
+
+    document.getElementById('p-server').innerHTML = [
+      kv('Process',        d.process        || '—'),
+      kv('PID',            d.pid            || '—'),
+      kv('Host',           d.host           || '—'),
+      kv('Storage engine', d.storage_engine || '—'),
+      kv('Virtual memory', (d.mem_virtual||0) + ' MB'),
+      kv('Page faults',    (d.page_faults||0).toLocaleString()),
+    ].join('');
+
+    const opsData = [
+      ['insert',  d.ops_insert  || 0],
+      ['query',   d.ops_query   || 0],
+      ['update',  d.ops_update  || 0],
+      ['delete',  d.ops_delete  || 0],
+      ['getmore', d.ops_getmore || 0],
+      ['command', d.ops_command || 0],
+    ];
+    const mxOp = Math.max(...opsData.map(o => o[1]), 1);
+    document.getElementById('p-ops').innerHTML = opsData.map(([k,v]) => brow(k,v,mxOp)).join('');
+
+    const bars = 24, used = Math.round((cur/(cur+avl||1))*bars);
+    document.getElementById('p-gauge').innerHTML = Array.from({length:bars}, (_,i) => {
+      const f = i < used, h = 14 + Math.random()*26;
+      return `<div class="mm-gauge-bar" style="height:${f?h:Math.max(5,h*.2)}px;background:${f?'var(--primary)':'var(--border-color)'}"></div>`;
+    }).join('');
+    document.getElementById('p-gauge-lbl').textContent = `${cur} active · ${avl} available · ${tot} total`;
+
+    document.getElementById('p-network').innerHTML = [
+      kv('Bytes in',  fmtB(d.net_bytes_in  || 0)),
+      kv('Bytes out', fmtB(d.net_bytes_out || 0)),
+      kv('Requests',  (d.net_num_requests  || 0).toLocaleString()),
+    ].join('');
+
+    loadCollections();
+    logsPage = 0;
+    loadLogs();
+
+  } catch(e) {
+    document.getElementById('mm-loading').style.display = 'none';
+    document.getElementById('mm-badge').className        = 'mm-status offline';
+    document.getElementById('mm-badge-text').textContent = 'Offline';
+    document.getElementById('mm-updated').textContent    = 'Failed at ' + new Date().toLocaleTimeString();
+    showMessage(ICON_ERROR, 'Could not connect to MongoDB',
+      e.message || 'Unknown error',
+      'Open Settings', '/app/mongodb-settings/MongoDB Settings', true);
+  }
+}
+
+frappe.ready(function() {
+
+  if (frappe.session.user === 'Guest') {
+    document.getElementById('mm-loading').style.display  = 'none';
+    document.getElementById('mm-badge').className        = 'mm-status offline';
+    document.getElementById('mm-badge-text').textContent = 'Not logged in';
+    document.getElementById('mm-updated').textContent    = '';
+    const btns = document.querySelectorAll('.mm-actions .mm-btn');
+    if (btns[0]) btns[0].style.display = 'none';
+    showMessage(ICON_LOCK, 'Authentication Required',
+      'You need to be logged in to view the MongoDB Monitor.',
+      'Log in', '/login?redirect-to=/mongo_monitor', false);
+    return;
+  }
+
+  loadStats();
+  setInterval(loadStats, 30000);
+});
+</script>
+{% endblock %}
