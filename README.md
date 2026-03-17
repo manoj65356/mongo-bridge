@@ -26,7 +26,6 @@
 - [Database API reference](#database-api-reference)
 - [Monitor dashboard](#monitor-dashboard)
 - [CLI commands](#cli-commands)
-- [File structure](#file-structure)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -129,61 +128,84 @@ Click the **Test Connection** button in MongoDB Settings to verify before saving
 
 ## Usage
 
-### Connection management — `frappe.mg`
+### `frappe.mg` — works exactly like `frappe.db`
 
-`init_mongodb()` is called by `hooks.py` on every request via `before_request`. It stores the `MongoDatabase` instance on `frappe.mg` — a module-level attribute that is **shared across all requests in the same worker process**. This is the correct way to use pymongo: `MongoClient` manages an internal connection pool and is designed to be instantiated once per process.
+`init_mongodb()` runs automatically on every request via `before_request` in `hooks.py`. It sets `frappe.mg` — available everywhere in Frappe with **no import needed**, exactly like `frappe.db`.
 
 ```
-frappe.mg         ✓  — one MongoClient per worker, connection pool reused
+frappe.db.get_value(...)   →   frappe.mg.get_value("collection", ...)
+frappe.db.get_list(...)    →   frappe.mg.get_list("collection", ...)
+frappe.db.exists(...)      →   frappe.mg.exists("collection", {...})
+frappe.db.insert(...)      →   frappe.mg.insert("collection", {...})
 ```
 
-`get_mg()` checks `frappe.mg.ping()` before returning it, so if the connection drops between requests it automatically reconnects.
-
-### In any Frappe Python file
+### In any Frappe Python file — no import needed
 
 ```python
-from mongo_bridge.utils import get_mg
-
-mg = get_mg()
-
-# Use mg like frappe.db
-docs = mg.get_list("movies", filters={"year": 2024}, limit=10)
-```
-
-### Convenience wrappers (shortest path)
-
-```python
-from mongo_bridge.utils import (
-    mg_get_list, mg_find_one, mg_get_value,
-    mg_insert, mg_update, mg_upsert, mg_delete,
-    mg_count, mg_aggregate, mg_exists
-)
-
-# Equivalent to get_mg().get_list(...)
-movies = mg_get_list("movies", filters={"genres": "Drama"}, limit=5)
-```
-
-### In a Frappe DocType controller
-
-```python
-import frappe
-from mongo_bridge.utils import get_mg
-
+# In a DocType controller
 class SalesOrder(Document):
     def after_insert(self):
-        mg = get_mg()
-        mg.insert("order_events", {
+        frappe.mg.insert("order_events", {
             "order_id": self.name,
             "event":    "created",
             "customer": self.customer,
         })
+
+    def on_submit(self):
+        doc = frappe.mg.find_one("order_events", {"order_id": self.name})
+
+    def on_cancel(self):
+        frappe.mg.delete("order_events", {"order_id": self.name})
+```
+
+```python
+# In a whitelisted API
+@frappe.whitelist()
+def get_movies():
+    return frappe.mg.get_list("movies",
+        filters={"year": {"$gte": 2020}},
+        limit=10
+    )
+```
+
+```python
+# In a scheduled job
+def sync_data():
+    count = frappe.mg.count("events", {"synced": False})
+    frappe.mg.update("events", {"synced": False}, {"synced": True})
+```
+
+> **Guard when MongoDB may be disabled:**
+> ```python
+> if frappe.mg:
+>     frappe.mg.insert("logs", {"event": "something"})
+> ```
+
+### In bench console
+
+`before_request` does not run in the console, so initialise once manually:
+
+```bash
+bench --site your-site.localhost console
+```
+
+```python
+from mongo_bridge.utils import init_mongodb
+init_mongodb()
+
+# Now use frappe.mg exactly as you would anywhere else
+frappe.mg.ping()
+frappe.mg.list_collections()
+frappe.mg.get_list("movies", limit=5)
+frappe.mg.count("movies", {"year": 2024})
+frappe.mg.find_one("movies", {"title": "Inception"})
 ```
 
 ---
 
 ## Database API reference
 
-All methods are available on the `MongoDatabase` instance returned by `get_mg()`.
+All methods are on `frappe.mg` — no import needed.
 
 ---
 
@@ -194,8 +216,7 @@ All methods are available on the `MongoDatabase` instance returned by `get_mg()`
 Returns a list of documents matching filters.
 
 ```python
-# All movies from 2020 onwards, newest first, only title and year fields
-movies = mg.get_list(
+movies = frappe.mg.get_list(
     "movies",
     filters={"year": {"$gte": 2020}},
     fields=["title", "year"],
@@ -223,7 +244,7 @@ movies = mg.get_list(
 Returns the first matching document or `None`.
 
 ```python
-movie = mg.find_one("movies", {"title": "Inception"})
+movie = frappe.mg.find_one("movies", {"title": "Inception"})
 
 if movie:
     print(movie.year)   # dot-access because it's frappe._dict
@@ -236,10 +257,10 @@ if movie:
 Returns a single field value from the first matching document.
 
 ```python
-year = mg.get_value("movies", {"title": "Inception"}, "year")
+year = frappe.mg.get_value("movies", {"title": "Inception"}, "year")
 # Returns: 2010
 
-missing = mg.get_value("movies", {"title": "Fake"}, "year", default=0)
+missing = frappe.mg.get_value("movies", {"title": "Fake"}, "year", default=0)
 # Returns: 0
 ```
 
@@ -250,7 +271,7 @@ missing = mg.get_value("movies", {"title": "Fake"}, "year", default=0)
 Returns `True` if at least one document matches.
 
 ```python
-if mg.exists("movies", {"title": "Inception"}):
+if frappe.mg.exists("movies", {"title": "Inception"}):
     frappe.msgprint("Found it!")
 ```
 
@@ -261,8 +282,8 @@ if mg.exists("movies", {"title": "Inception"}):
 Returns the count of matching documents.
 
 ```python
-total_2024 = mg.count("movies", {"year": 2024})
-all_docs    = mg.count("movies")
+total_2024 = frappe.mg.count("movies", {"year": 2024})
+all_docs    = frappe.mg.count("movies")
 ```
 
 ---
@@ -272,10 +293,10 @@ all_docs    = mg.count("movies")
 Returns a list of distinct values for a field.
 
 ```python
-all_genres = mg.distinct("movies", "genres")
+all_genres  = frappe.mg.distinct("movies", "genres")
 # Returns: ["Action", "Comedy", "Drama", ...]
 
-genres_2024 = mg.distinct("movies", "genres", {"year": 2024})
+genres_2024 = frappe.mg.distinct("movies", "genres", {"year": 2024})
 ```
 
 ---
@@ -285,8 +306,7 @@ genres_2024 = mg.distinct("movies", "genres", {"year": 2024})
 Runs a MongoDB aggregation pipeline.
 
 ```python
-# Count movies per genre, sorted by count descending
-results = mg.aggregate("movies", [
+results = frappe.mg.aggregate("movies", [
     {"$unwind": "$genres"},
     {"$group": {"_id": "$genres", "count": {"$sum": 1}}},
     {"$sort": {"count": -1}},
@@ -304,7 +324,7 @@ results = mg.aggregate("movies", [
 Inserts a single document. Automatically adds `creation` and `modified` timestamps.
 
 ```python
-inserted_id = mg.insert("movies", {
+inserted_id = frappe.mg.insert("movies", {
     "title": "My New Film",
     "year":  2025,
     "genres": ["Drama"],
@@ -319,7 +339,7 @@ inserted_id = mg.insert("movies", {
 Inserts many documents at once. Returns a list of inserted IDs.
 
 ```python
-ids = mg.bulk_insert("movies", [
+ids = frappe.mg.bulk_insert("movies", [
     {"title": "Film A", "year": 2025},
     {"title": "Film B", "year": 2025},
 ])
@@ -332,12 +352,11 @@ ids = mg.bulk_insert("movies", [
 Updates **all** matching documents using `$set`. Returns modified count.
 
 ```python
-count = mg.update(
+count = frappe.mg.update(
     "movies",
     {"year": {"$lt": 1950}},
     {"era": "classic"}
 )
-print(f"Updated {count} documents")
 ```
 
 ---
@@ -347,7 +366,7 @@ print(f"Updated {count} documents")
 Updates only the **first** matching document.
 
 ```python
-mg.update_one("movies", {"title": "Inception"}, {"reviewed": True})
+frappe.mg.update_one("movies", {"title": "Inception"}, {"reviewed": True})
 ```
 
 ---
@@ -357,14 +376,12 @@ mg.update_one("movies", {"title": "Inception"}, {"reviewed": True})
 Updates if the document exists, inserts if it does not.
 
 ```python
-result = mg.upsert(
+result = frappe.mg.upsert(
     "app_config",
     {"key": "theme"},
     {"key": "theme", "value": "dark"}
 )
 # result = {"matched": 1, "modified": 1, "upserted_id": None}
-# or on insert:
-# result = {"matched": 0, "modified": 0, "upserted_id": ObjectId("...")}
 ```
 
 ---
@@ -374,8 +391,7 @@ result = mg.upsert(
 Deletes **all** matching documents. Returns deleted count.
 
 ```python
-deleted = mg.delete("movies", {"year": {"$lt": 1900}})
-print(f"Deleted {deleted} documents")
+deleted = frappe.mg.delete("movies", {"year": {"$lt": 1900}})
 ```
 
 ---
@@ -385,35 +401,28 @@ print(f"Deleted {deleted} documents")
 Deletes only the **first** matching document.
 
 ```python
-mg.delete_one("movies", {"title": "Draft Film"})
+frappe.mg.delete_one("movies", {"title": "Draft Film"})
 ```
 
 ---
 
 ### Index methods
 
-#### `create_index(collection, keys, unique, **kwargs)`
-
 ```python
-# Single field index
-mg.create_index("movies", [("title", 1)])
+# Single field
+frappe.mg.create_index("movies", [("title", 1)])
 
-# Compound index
-mg.create_index("movies", [("year", -1), ("title", 1)])
+# Compound
+frappe.mg.create_index("movies", [("year", -1), ("title", 1)])
 
-# Unique index
-mg.create_index("users", [("email", 1)], unique=True)
+# Unique
+frappe.mg.create_index("users", [("email", 1)], unique=True)
 
-# Text search index
-mg.create_index("movies", [("title", "text"), ("plot", "text")])
-```
+# Text search
+frappe.mg.create_index("movies", [("title", "text"), ("plot", "text")])
 
-#### `list_indexes(collection)`
-
-```python
-indexes = mg.list_indexes("movies")
-for idx in indexes:
-    print(idx["name"], idx["key"])
+# List indexes
+frappe.mg.list_indexes("movies")
 ```
 
 ---
@@ -422,11 +431,11 @@ for idx in indexes:
 
 | Method | Returns | Description |
 |---|---|---|
-| `ping()` | `bool` | True if server is reachable |
-| `get_status()` | `dict` | Full MongoDB `serverStatus` |
-| `list_collections()` | `list` | Collection names in current database |
-| `collection_stats(name)` | `dict` | Count, size, index info for one collection |
-| `disconnect()` | — | Close the connection |
+| `frappe.mg.ping()` | `bool` | True if server is reachable |
+| `frappe.mg.get_status()` | `dict` | Full MongoDB `serverStatus` |
+| `frappe.mg.list_collections()` | `list` | Collection names in current database |
+| `frappe.mg.collection_stats(name)` | `dict` | Count, size, index info for one collection |
+| `frappe.mg.disconnect()` | — | Close the connection |
 
 ---
 
@@ -457,8 +466,8 @@ for idx in indexes:
 {"poster": {"$exists": True}}
 
 # Array contains
-{"genres": "Drama"}              # genres array contains "Drama"
-{"genres": {"$all": ["Drama", "Crime"]}}  # contains both
+{"genres": "Drama"}
+{"genres": {"$all": ["Drama", "Crime"]}}
 
 # Regex
 {"title": {"$regex": "^The", "$options": "i"}}
@@ -510,7 +519,6 @@ Memory:      256MB Resident
 
 ---
 
-
 ## Troubleshooting
 
 **`pymongo` or `dnspython` not found**
@@ -529,33 +537,32 @@ bench build --app mongo_bridge
 bench clear-cache
 ```
 
-**`frappe.mg` is None after init**
+**`frappe.mg` is None**
 
 This usually means `enable_mongodb` is unchecked in MongoDB Settings, or the connection failed silently. Check:
 ```bash
 bench --site your-site.localhost console
->>> import frappe
->>> frappe.get_single("MongoDB Settings").enable_mongodb
-# Should be 1
->>> from mongo_bridge.utils import get_mg
->>> mg = get_mg()
->>> mg.ping()
-# Should be True
+```
+```python
+from mongo_bridge.utils import init_mongodb
+init_mongodb()
+frappe.mg.ping()   # Should return True
 ```
 
 **Read preference or failover not working**
 
-You are missing the `Replica Set` field. Without it pymongo operates in standalone mode regardless of the actual server topology. Set it to `atlas-shard-0` for Atlas or `rs0` for a local replica set, save, then run `bench restart` so `frappe.mg` is rebuilt with the updated URI.
+You are missing the `Replica Set` field. Without it pymongo operates in standalone mode regardless of the actual server topology. Set it to `atlas-shard-0` for Atlas or `rs0` for a local replica set, save, then run `bench restart`.
 
 **Connection URI field value not being picked up**
 
-The field is `Password` type — the raw value is never returned, only the decrypted one via `get_password()`. If you saved a value before the field type was changed to Password, resave the document so it gets encrypted properly. After resaving:
+The field is `Password` type — resave the document so it gets encrypted properly. Then verify:
 ```bash
 bench --site your-site.localhost console
->>> import frappe
->>> s = frappe.get_single("MongoDB Settings")
->>> bool(s.connection_uri)   # True = field has a value
->>> s.get_password("connection_uri")  # Should return the plain URI
+```
+```python
+s = frappe.get_single("MongoDB Settings")
+bool(s.connection_uri)            # True = field has a value
+s.get_password("connection_uri")  # Should return the plain URI
 ```
 
 **`serverSelectionTimeoutError` on Atlas**
@@ -564,11 +571,11 @@ Ensure `dnspython` is installed, `Use SRV (Atlas)` is checked, and the connectin
 
 **Replica set name for Atlas**
 
-In the Atlas UI go to your cluster → **Connect** → **Connect your application** → copy the connection string. The replica set name appears as `?replicaSet=atlas-shard-0` (or similar) at the end. Copy just the `atlas-shard-0` part into the Replica Set field — do not paste the full URI there unless using the Connection URI field.
+In the Atlas UI go to your cluster → **Connect** → **Connect your application** → copy the connection string. The replica set name appears as `?replicaSet=atlas-shard-0` at the end. Copy just `atlas-shard-0` into the Replica Set field.
 
 **Slow queries in logs**
 
-Queries taking more than 200 ms are logged as `SLOW QUERY` in the `mongodb_bridge` log channel. Add an index on the field you are filtering by:
+Queries taking more than 200 ms are logged as `SLOW QUERY`. Add an index on the field you are filtering by:
 ```python
-mg.create_index("your_collection", [("the_slow_field", 1)])
+frappe.mg.create_index("your_collection", [("the_slow_field", 1)])
 ```

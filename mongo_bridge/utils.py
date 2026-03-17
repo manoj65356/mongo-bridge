@@ -1,4 +1,5 @@
 import frappe
+import mongo_bridge
 from mongo_bridge.database.mongo_db import MongoDatabase
 
 
@@ -7,47 +8,40 @@ def init_mongodb():
         settings = frappe.get_single("MongoDB Settings")
     except Exception:
         return
-
+ 
     if not settings.enable_mongodb:
         return
-
-    if getattr(frappe, "mg", None):
-        return
-
+ 
+    if mongo_bridge.mg is not None:
+        try:
+            mongo_bridge.mg.ping()
+            frappe.mg = mongo_bridge.mg
+            return
+        except Exception:
+            pass
+ 
     try:
-        frappe.mg = MongoDatabase()
-        frappe.mg.connect()
+        instance = MongoDatabase()
+        instance.connect()
+        mongo_bridge.mg = instance
+        frappe.mg       = instance
     except Exception as e:
         frappe.logger("mongodb_bridge").error(f"init_mongodb failed: {e}")
-        frappe.mg = None
-
-
+        mongo_bridge.mg = None
+        frappe.mg       = None
+ 
+ 
 def get_mg() -> MongoDatabase:
-    """
-    Get the request-scoped MongoDatabase instance.
-    Raises ValidationError if MongoDB is not initialised.
-
-    Usage:
-        from mongo_bridge.utils import get_mg
-        mg = get_mg()
-        docs = mg.get_list("movies", limit=10)
-    """
     mg = getattr(frappe, "mg", None)
     if mg is None:
         init_mongodb()
         mg = getattr(frappe, "mg", None)
-
     if mg is None:
         raise frappe.ValidationError(
             "MongoDB is not initialised. "
             "Check that MongoDB is enabled in MongoDB Settings and the server is reachable."
         )
     return mg
-
-
-def check_app_permission():
-    """Required by add_to_apps_screen in hooks."""
-    return "System Manager" in frappe.get_roles()
 
 
 def mg_get_list(collection, **kwargs):
